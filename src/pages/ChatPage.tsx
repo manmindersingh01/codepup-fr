@@ -1559,7 +1559,11 @@ const ChatPage: React.FC = () => {
           <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border-b border-blue-500/20 p-3">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-blue-400" />
+                <img
+                src="/main.png"
+                alt="CodePup Logo"
+                className="w-8 h-8 md:w-8 md:h-8 object-contain"
+              />
                 <span className="text-xs font-medium text-blue-400">
                   STREAMING GENERATION
                 </span>
@@ -1819,7 +1823,11 @@ const ChatPage: React.FC = () => {
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="p-4 bg-slate-800/30 rounded-full mb-4">
                 {isStreamingGeneration ? (
-                  <Zap className="w-8 h-8 text-blue-400 animate-pulse" />
+                    <img
+                src="/main.png"
+                alt="CodePup Logo"
+                className="w-16 h-16 md:w-8 md:h-8 object-contain"
+              />
                 ) : (
                   <Loader2 className="w-8 h-8 text-white animate-spin" />
                 )}
@@ -2077,7 +2085,11 @@ const ChatPage: React.FC = () => {
                     {isServerHealthy === false ? (
                       <AlertCircle className="w-8 h-8 text-red-400" />
                     ) : isStreamingGeneration ? (
-                      <Zap className="w-8 h-8 text-blue-400 animate-pulse" />
+                        <img
+                src="/main.png"
+                alt="CodePup Logo"
+                className="w-16 h-16 md:w-8 md:h-8 object-contain"
+              />
                     ) : isGenerating.current ||
                       projectStatus === "loading" ||
                       projectStatus === "fetching" ? (
