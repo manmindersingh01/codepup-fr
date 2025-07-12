@@ -16,7 +16,6 @@ import {
   RefreshCw,
   AlertCircle,
   ExternalLink,
-  Zap,
   Activity,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
