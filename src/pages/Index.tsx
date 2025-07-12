@@ -20,7 +20,6 @@ import {
   Activity,
   AlertCircle,
   Database,
-  Settings,
 } from "lucide-react";
 import SupabaseConfigForm from "./form"; // Import the form component
 
@@ -350,7 +349,6 @@ const Index = () => {
           supabaseConfig: supabaseConfig,
         },
       });
-      f;
     },
     [navigate, projectSessions, hasSessionSupport, supabaseConfig]
   );
@@ -555,7 +553,10 @@ const Index = () => {
           };
         }
 
-        setDbUser(userResponse.data);
+        setDbUser({
+          ...userResponse.data,
+          profileImage: userResponse.data.profileImage || undefined
+        });
 
         // Fetch user's projects
         setLoadingProjects(true);

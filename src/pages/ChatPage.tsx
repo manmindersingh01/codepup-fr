@@ -134,7 +134,6 @@ const ChatPage: React.FC = () => {
     estimatedTotalChunks: 0,
     startTime: 0,
   });
-  const [generationChunks, setGenerationChunks] = useState<string[]>([]);
   const [showStreamingDetails, setShowStreamingDetails] = useState(false);
 
   // Project matching state
@@ -258,7 +257,6 @@ const ChatPage: React.FC = () => {
 
       case "chunk":
         if (data.chunk) {
-          setGenerationChunks((prev) => [...prev, data.chunk!]);
           setStreamingStats((prev) => ({
             ...prev,
             chunksReceived: prev.chunksReceived + 1,
@@ -324,7 +322,6 @@ const ChatPage: React.FC = () => {
       setStreamingProgress(0);
       setStreamingPhase("generating");
       setStreamingMessage("Starting generation...");
-      setGenerationChunks([]);
       setStreamingStats({
         totalCharacters: 0,
         chunksReceived: 0,
@@ -1191,7 +1188,7 @@ const ChatPage: React.FC = () => {
         console.error("Error in streaming response:", error);
 
         setMessages((prev) =>
-          prev.filter((msg) => msg.id !== streamingMessage.id)
+          prev.filter((msg) => msg.id !== (streamingMessage as unknown as Message).id)
         );
 
         const errorMessage: Message = {

@@ -2,12 +2,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { 
   Database, 
-  Key, 
   Eye,
   EyeOff,
   Info,
-  CheckCircle,
-  AlertCircle,
   X,
   Save
 } from 'lucide-react';
