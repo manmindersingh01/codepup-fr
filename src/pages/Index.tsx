@@ -17,7 +17,6 @@ import {
   Trash2,
   MessageSquare,
   Clock,
-  Activity,
   AlertCircle,
   Database,
 } from "lucide-react";
@@ -33,7 +32,6 @@ interface Project {
   updatedAt?: string;
   projectType?: string;
   status?: string;
-  lastSessionId?: string;
   messageCount?: number;
 }
 
@@ -44,13 +42,6 @@ interface DbUser {
   name: string;
   phoneNumber: string | null;
   profileImage?: string;
-}
-
-interface SessionInfo {
-  sessionId: string;
-  messageCount: number;
-  lastActivity: string;
-  hasActiveConversation: boolean;
 }
 
 interface SupabaseConfig {
@@ -70,8 +61,6 @@ const ProjectCard = React.memo(
     onProjectClick,
     onDeleteProject,
     onContinueChat,
-    sessionInfo,
-    hasSessionSupport,
   }: {
     project: Project;
     onProjectClick: (project: Project) => void;
@@ -83,8 +72,6 @@ const ProjectCard = React.memo(
       project: Project,
       e: React.MouseEvent<HTMLButtonElement>
     ) => void;
-    sessionInfo?: SessionInfo;
-    hasSessionSupport: boolean;
   }) => (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -127,22 +114,6 @@ const ProjectCard = React.memo(
           </div>
         )}
 
-        {/* Activity Indicator */}
-        {sessionInfo?.hasActiveConversation && (
-          <div className="absolute top-2 right-2">
-            <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
-          </div>
-        )}
-
-        {/* Compatibility Mode Indicator */}
-        {!hasSessionSupport &&
-          project.messageCount &&
-          project.messageCount > 0 && (
-            <div className="absolute top-2 right-2">
-              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-            </div>
-          )}
-
         {/* Overlay on hover */}
         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
           <span className="text-white text-sm font-medium">Open Project</span>
@@ -169,12 +140,12 @@ const ProjectCard = React.memo(
           </p>
         )}
 
-        {/* Session Info or Message Count */}
-        {hasSessionSupport && sessionInfo && sessionInfo.messageCount > 0 ? (
+        {/* Message Count */}
+        {project.messageCount && project.messageCount > 0 && (
           <div className="flex items-center gap-2 p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg">
             <MessageSquare className="w-3 h-3 text-blue-400" />
             <span className="text-xs text-blue-400">
-              {sessionInfo.messageCount} messages
+              {project.messageCount} messages
             </span>
             <button
               onClick={(e) => onContinueChat(project, e)}
@@ -183,22 +154,7 @@ const ProjectCard = React.memo(
               Continue Chat
             </button>
           </div>
-        ) : !hasSessionSupport &&
-          project.messageCount &&
-          project.messageCount > 0 ? (
-          <div className="flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-            <AlertCircle className="w-3 h-3 text-yellow-400" />
-            <span className="text-xs text-yellow-400">
-              {project.messageCount} messages (legacy)
-            </span>
-            <button
-              onClick={(e) => onContinueChat(project, e)}
-              className="text-xs text-yellow-400 hover:text-yellow-300 underline ml-auto"
-            >
-              Continue
-            </button>
-          </div>
-        ) : null}
+        )}
 
         <div className="flex items-center justify-between text-xs text-neutral-500">
           <div className="flex items-center gap-1">
@@ -207,26 +163,7 @@ const ProjectCard = React.memo(
           </div>
 
           <div className="flex items-center gap-3">
-            {hasSessionSupport && sessionInfo?.lastActivity && (
-              <div className="flex items-center gap-1">
-                <Activity className="w-3 h-3" />
-                <span>
-                  {new Date(sessionInfo.lastActivity).toLocaleDateString() ===
-                  new Date().toLocaleDateString()
-                    ? new Date(sessionInfo.lastActivity).toLocaleTimeString(
-                        [],
-                        {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }
-                      )
-                    : new Date(sessionInfo.lastActivity).toLocaleDateString()}
-                </span>
-              </div>
-            )}
-
-            {!hasSessionSupport &&
-              project.updatedAt &&
+            {project.updatedAt &&
               new Date(project.updatedAt).getTime() !==
                 new Date(project.createdAt).getTime() && (
                 <div className="flex items-center gap-1">
@@ -259,14 +196,6 @@ const Index = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState<boolean>(false);
   const [dbUser, setDbUser] = useState<DbUser | null>(null);
-  const [projectSessions, setProjectSessions] = useState<
-    Record<number, SessionInfo>
-  >({});
-  const [loadingSessions, setLoadingSessions] = useState<boolean>(false);
-  const [hasSessionSupport, setHasSessionSupport] = useState(true);
-  const [backendStatus, setBackendStatus] = useState<
-    "checking" | "available" | "limited"
-  >("checking");
 
   // Supabase configuration state
   const [showSupabaseConfig, setShowSupabaseConfig] = useState(false);
@@ -305,30 +234,99 @@ const Index = () => {
     });
   }, []);
 
-  // Check backend capabilities
-  const checkBackendCapabilities = useCallback(async () => {
-    try {
-      const response = await axios.get(`${BASE_URL}/health`);
-      const features = response.data.features || [];
-
-      if (
-        features.includes("Redis stateless sessions") ||
-        features.includes("Session-based conversations")
-      ) {
-        setHasSessionSupport(true);
-        setBackendStatus("available");
-      } else {
-        setHasSessionSupport(false);
-        setBackendStatus("limited");
+  // Load user from localStorage on component mount
+  useEffect(() => {
+    const loadUserFromStorage = () => {
+      const storedUser = localStorage.getItem('dbUser');
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setDbUser(parsedUser);
+          console.log('✅ User loaded from localStorage:', parsedUser);
+        } catch (error) {
+          console.warn('Failed to parse stored user');
+          localStorage.removeItem('dbUser');
+        }
       }
-    } catch (error) {
-      console.warn("Could not check backend capabilities:", error);
-      setHasSessionSupport(false);
-      setBackendStatus("limited");
-    }
+    };
+
+    loadUserFromStorage();
   }, []);
 
-  // Memoized handlers to prevent unnecessary re-renders
+  // Clear localStorage on sign out
+  useEffect(() => {
+    if (isLoaded && !clerkUser) {
+      // User signed out, clear localStorage
+      localStorage.removeItem('dbUser');
+      setDbUser(null);
+      setProjects([]);
+      console.log('🔄 User signed out, localStorage cleared');
+    }
+  }, [isLoaded, clerkUser]);
+
+  // User sync helper function with localStorage
+  const syncUserWithBackend = async (clerkUser: any): Promise<DbUser | null> => {
+    try {
+      // First check if user is already in localStorage
+      const storedUser = localStorage.getItem('dbUser');
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser.clerkId === clerkUser.id) {
+            console.log('✅ Using cached user from localStorage:', parsedUser);
+            return parsedUser;
+          }
+        } catch (error) {
+          console.warn('Failed to parse stored user, will sync with backend');
+        }
+      }
+
+      const userData = {
+        clerkId: clerkUser.id,
+        email: clerkUser.emailAddresses[0]?.emailAddress || "",
+        name: clerkUser.fullName || clerkUser.firstName || "User",
+        phoneNumber: clerkUser.phoneNumbers[0]?.phoneNumber || null,
+        profileImage: clerkUser.imageUrl || null,
+      };
+
+      console.log('🔍 Syncing user with backend:', userData);
+
+      // Create/update user in database
+      const userResponse = await axios.post<DbUser>(
+        `${BASE_URL}/api/users`,
+        userData
+      );
+
+      console.log('✅ User synced successfully:', userResponse.data);
+      
+      // Save user to localStorage
+      localStorage.setItem('dbUser', JSON.stringify(userResponse.data));
+      console.log('💾 User saved to localStorage');
+      
+      return userResponse.data;
+
+    } catch (error) {
+      console.error('❌ Failed to sync user with backend:', error);
+      
+      // Fallback: create a temporary user object
+      console.log('⚠️ Using fallback user data');
+      const fallbackUser = {
+        id: 1, // Fallback ID
+        clerkId: clerkUser.id,
+        email: clerkUser.emailAddresses[0]?.emailAddress || "",
+        name: clerkUser.fullName || clerkUser.firstName || "User",
+        phoneNumber: clerkUser.phoneNumbers[0]?.phoneNumber || null,
+        profileImage: clerkUser.imageUrl || null,
+      };
+      
+      // Save fallback user to localStorage
+      localStorage.setItem('dbUser', JSON.stringify(fallbackUser));
+      
+      return fallbackUser;
+    }
+  };
+
+  // Memoized handlers
   const handlePromptChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setPrompt(e.target.value);
@@ -336,24 +334,21 @@ const Index = () => {
     []
   );
 
-  // Updated handleProjectClick to pass Supabase config
   const handleProjectClick = useCallback(
     (project: Project) => {
       navigate("/chatPage", {
         state: {
           projectId: project.id,
           existingProject: true,
-          sessionId: hasSessionSupport
-            ? projectSessions[project.id]?.sessionId
-            : project.lastSessionId,
+          clerkId: dbUser?.clerkId,
+          userId: dbUser?.id,
           supabaseConfig: supabaseConfig,
         },
       });
     },
-    [navigate, projectSessions, hasSessionSupport, supabaseConfig]
+    [navigate, dbUser]
   );
 
-  // Updated handleContinueChat to pass Supabase config
   const handleContinueChat = useCallback(
     (project: Project, e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
@@ -361,48 +356,34 @@ const Index = () => {
         state: {
           projectId: project.id,
           existingProject: true,
-          sessionId: hasSessionSupport
-            ? projectSessions[project.id]?.sessionId
-            : project.lastSessionId,
-          supabaseConfig: supabaseConfig, // Pass Supabase config
+          clerkId: dbUser?.clerkId,
+          userId: dbUser?.id,
+          supabaseConfig: supabaseConfig,
         },
       });
     },
-    [navigate, projectSessions, hasSessionSupport, supabaseConfig]
+    [navigate, dbUser]
   );
 
   const handleDeleteProject = useCallback(
     async (projectId: number, e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
 
-      const warningMessage = hasSessionSupport
-        ? "Are you sure you want to delete this project? This will also delete all associated chat sessions and messages."
-        : "Are you sure you want to delete this project? This will also delete all associated messages.";
-
-      if (!window.confirm(warningMessage)) return;
+      if (!window.confirm("Are you sure you want to delete this project? This will also delete all associated messages.")) {
+        return;
+      }
 
       try {
-        // Delete project and associated data
         await axios.delete(`${BASE_URL}/api/projects/${projectId}`);
-
-        // Remove from local state
         setProjects((prev) => prev.filter((p) => p.id !== projectId));
-        if (hasSessionSupport) {
-          setProjectSessions((prev) => {
-            const newSessions = { ...prev };
-            delete newSessions[projectId];
-            return newSessions;
-          });
-        }
       } catch (error) {
         console.error("Error deleting project:", error);
-        // Could add toast notification here
       }
     },
-    [hasSessionSupport]
+    []
   );
 
-  // Updated handleSubmit to pass Supabase config
+  // Updated handleSubmit function
   const handleSubmit = useCallback(async () => {
     if (!dbUser || !prompt.trim()) {
       console.error("User not authenticated or prompt is empty");
@@ -418,9 +399,10 @@ const Index = () => {
     setIsLoading(true);
 
     try {
-      // Create project in database with enhanced metadata
+      // Create project in database with Clerk ID
       const projectData = {
         userId: dbUser.id,
+        clerkId: dbUser.clerkId, // Include Clerk ID
         name: `Project ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString(
           [],
           { hour: "2-digit", minute: "2-digit" }
@@ -442,78 +424,35 @@ const Index = () => {
         console.warn(
           "Could not create project in database, proceeding without project ID"
         );
-        // Navigate to chat page without project ID but with Supabase config
         navigate("/chatPage", {
           state: {
             prompt,
             existingProject: false,
-            supabaseConfig: supabaseConfig, // Pass Supabase config
+            clerkId: dbUser.clerkId, // Pass Clerk ID
+            userId: dbUser.id,
+            supabaseConfig: supabaseConfig,
           },
         });
         return;
       }
 
-      // Navigate to chat page with prompt, project ID, and Supabase config
+      // Navigate to chat page with prompt, project ID, and user data
       navigate("/chatPage", {
         state: {
           prompt,
           projectId: newProject.id,
           existingProject: false,
-          supabaseConfig: supabaseConfig, // Pass Supabase config
+          clerkId: dbUser.clerkId, // Pass Clerk ID
+          userId: dbUser.id,
+          supabaseConfig: supabaseConfig,
         },
       });
     } catch (error) {
       console.error("Error creating project:", error);
-      // Could add toast notification here
     } finally {
       setIsLoading(false);
     }
   }, [dbUser, prompt, navigate, supabaseConfig, isConfigValid]);
-
-  // Fetch session information for projects (only if session support is available)
-  const fetchProjectSessions = useCallback(
-    async (projectIds: number[]) => {
-      if (projectIds.length === 0 || !hasSessionSupport) return;
-
-      setLoadingSessions(true);
-      try {
-        const sessionPromises = projectIds.map(async (projectId) => {
-          try {
-            // Check if there's an active session for this project
-            const response = await axios.get(
-              `${BASE_URL}/api/conversation/project-status?projectId=${projectId}`
-            );
-            return {
-              projectId,
-              sessionInfo: response.data as SessionInfo,
-            };
-          } catch (error) {
-            // If no session exists for this project, that's okay
-            return {
-              projectId,
-              sessionInfo: null,
-            };
-          }
-        });
-
-        const results = await Promise.all(sessionPromises);
-        const sessionsMap: Record<number, SessionInfo> = {};
-
-        results.forEach(({ projectId, sessionInfo }) => {
-          if (sessionInfo) {
-            sessionsMap[projectId] = sessionInfo;
-          }
-        });
-
-        setProjectSessions(sessionsMap);
-      } catch (error) {
-        console.error("Error fetching project sessions:", error);
-      } finally {
-        setLoadingSessions(false);
-      }
-    },
-    [hasSessionSupport]
-  );
 
   // Sync user with database and fetch projects
   useEffect(() => {
@@ -521,61 +460,34 @@ const Index = () => {
       if (!isLoaded || !clerkUser) return;
 
       try {
-        // Create or update user in database
-        const userData = {
-          clerkId: clerkUser.id,
-          email: clerkUser.emailAddresses[0]?.emailAddress || "",
-          name: clerkUser.fullName || clerkUser.firstName || "User",
-          phoneNumber: clerkUser.phoneNumbers[0]?.phoneNumber || null,
-          profileImage: clerkUser.imageUrl || null,
-        };
-
-        let userResponse;
-        try {
-          userResponse = await axios.post<DbUser>(
-            `${BASE_URL}/api/users`,
-            userData
-          );
-        } catch (userError) {
-          console.warn(
-            "Users endpoint not available, using fallback user data"
-          );
-          // Create a fallback user object for development
-          userResponse = {
-            data: {
-              id: 1,
-              clerkId: clerkUser.id,
-              email: userData.email,
-              name: userData.name,
-              phoneNumber: userData.phoneNumber,
-              profileImage: userData.profileImage,
-            },
-          };
+        // Sync user with backend (will use localStorage cache if available)
+        const backendUser = await syncUserWithBackend(clerkUser);
+        
+        if (!backendUser) {
+          console.error('❌ Failed to sync user with backend');
+          return;
         }
 
-        setDbUser({
-          ...userResponse.data,
-          profileImage: userResponse.data.profileImage || undefined
-        });
+        // Update state if user data changed
+        if (!dbUser || dbUser.id !== backendUser.id) {
+          setDbUser(backendUser);
+          console.log('✅ Database user updated:', backendUser);
+        }
 
-        // Fetch user's projects
+        // Fetch user's projects using the correct user ID
         setLoadingProjects(true);
         try {
           const projectsResponse = await axios.get<Project[]>(
-            `${BASE_URL}/api/projects/user/${userResponse.data.id}`
+            `${BASE_URL}/api/projects/user/${backendUser.id}`
           );
 
           const fetchedProjects = projectsResponse.data;
           setProjects(fetchedProjects);
+          console.log(`✅ Fetched ${fetchedProjects.length} projects for user ${backendUser.id}`);
 
-          // Fetch session information for all projects (if session support is available)
-          if (fetchedProjects.length > 0 && hasSessionSupport) {
-            const projectIds = fetchedProjects.map((p) => p.id);
-            await fetchProjectSessions(projectIds);
-          }
         } catch (projectError) {
           console.warn("Could not fetch projects:", projectError);
-          setProjects([]); // Set empty array as fallback
+          setProjects([]);
         }
       } catch (error) {
         console.error("Error syncing user or fetching projects:", error);
@@ -585,65 +497,24 @@ const Index = () => {
     };
 
     syncUserAndFetchProjects();
-  }, [clerkUser, isLoaded, fetchProjectSessions, hasSessionSupport]);
+  }, [clerkUser, isLoaded]); // Removed dbUser from dependencies to avoid loop
 
-  // Check backend capabilities on load
-  useEffect(() => {
-    checkBackendCapabilities();
-  }, [checkBackendCapabilities]);
-
-  // Refresh session data periodically (only if session support is available)
-  useEffect(() => {
-    if (projects.length === 0 || !hasSessionSupport) return;
-
-    const interval = setInterval(() => {
-      const projectIds = projects.map((p) => p.id);
-      fetchProjectSessions(projectIds);
-    }, 30000); // Refresh every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [projects, fetchProjectSessions, hasSessionSupport]);
-
-  // Memoized project cards to prevent re-rendering on prompt change
+  // Memoized project cards
   const memoizedProjectCards = useMemo(() => {
-    // Sort projects by activity or message count depending on session support
+    // Sort projects by message count and last update
     const sortedProjects = [...projects].sort((a, b) => {
-      if (hasSessionSupport) {
-        const aSession = projectSessions[a.id];
-        const bSession = projectSessions[b.id];
+      const aMessages = a.messageCount || 0;
+      const bMessages = b.messageCount || 0;
 
-        // Projects with active sessions first
-        if (aSession?.hasActiveConversation && !bSession?.hasActiveConversation)
-          return -1;
-        if (!aSession?.hasActiveConversation && bSession?.hasActiveConversation)
-          return 1;
+      if (aMessages !== bMessages) {
+        return bMessages - aMessages; // More messages first
+      }
 
-        // Then by last activity if both have sessions
-        if (aSession?.lastActivity && bSession?.lastActivity) {
-          return (
-            new Date(bSession.lastActivity).getTime() -
-            new Date(aSession.lastActivity).getTime()
-          );
-        }
-
-        // Projects with sessions before those without
-        if (aSession && !bSession) return -1;
-        if (!aSession && bSession) return 1;
-      } else {
-        // Sort by message count and last update for legacy mode
-        const aMessages = a.messageCount || 0;
-        const bMessages = b.messageCount || 0;
-
-        if (aMessages !== bMessages) {
-          return bMessages - aMessages; // More messages first
-        }
-
-        // Then by update time
-        const aTime = new Date(a.updatedAt || a.createdAt).getTime();
-        const bTime = new Date(b.updatedAt || b.createdAt).getTime();
-        if (aTime !== bTime) {
-          return bTime - aTime; // More recent first
-        }
+      // Then by update time
+      const aTime = new Date(a.updatedAt || a.createdAt).getTime();
+      const bTime = new Date(b.updatedAt || b.createdAt).getTime();
+      if (aTime !== bTime) {
+        return bTime - aTime; // More recent first
       }
 
       // Finally by creation date (newest first)
@@ -662,56 +533,32 @@ const Index = () => {
           onProjectClick={handleProjectClick}
           onDeleteProject={handleDeleteProject}
           onContinueChat={handleContinueChat}
-          sessionInfo={projectSessions[project.id]}
-          hasSessionSupport={hasSessionSupport}
         />
       </motion.div>
     ));
   }, [
     projects,
-    projectSessions,
     handleProjectClick,
     handleDeleteProject,
     handleContinueChat,
-    hasSessionSupport,
   ]);
 
   // Memoized project stats
   const projectStats = useMemo(() => {
     const activeProjects = projects.filter((p) => p.status === "ready").length;
-
-    let projectsWithChats = 0;
-    let totalMessages = 0;
-
-    if (hasSessionSupport) {
-      projectsWithChats = Object.keys(projectSessions).length;
-      totalMessages = Object.values(projectSessions).reduce(
-        (sum, session) => sum + (session?.messageCount || 0),
-        0
-      );
-    } else {
-      projectsWithChats = projects.filter(
-        (p) => (p.messageCount || 0) > 0
-      ).length;
-      totalMessages = projects.reduce(
-        (sum, p) => sum + (p.messageCount || 0),
-        0
-      );
-    }
+    const projectsWithChats = projects.filter((p) => (p.messageCount || 0) > 0).length;
+    const totalMessages = projects.reduce((sum, p) => sum + (p.messageCount || 0), 0);
 
     return {
       count: projects.length,
       active: activeProjects,
       withChats: projectsWithChats,
       totalMessages,
-      text: `${projects.length} project${
-        projects.length !== 1 ? "s" : ""
-      } • ${activeProjects} ready`,
-      chatsText:
-        projectsWithChats > 0 ? ` • ${projectsWithChats} with chats` : "",
+      text: `${projects.length} project${projects.length !== 1 ? "s" : ""} • ${activeProjects} ready`,
+      chatsText: projectsWithChats > 0 ? ` • ${projectsWithChats} with chats` : "",
       messagesText: totalMessages > 0 ? ` • ${totalMessages} messages` : "",
     };
-  }, [projects, projectSessions, hasSessionSupport]);
+  }, [projects]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -789,35 +636,6 @@ const Index = () => {
           </SignedIn>
         </motion.header>
 
-        {/* Backend Status Indicator */}
-        {backendStatus !== "checking" && (
-          <motion.div
-            initial={{ y: -20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            className="absolute top-6 left-6 z-20"
-          >
-            <div
-              className={`px-3 py-2 rounded-lg border text-xs font-medium ${
-                backendStatus === "available"
-                  ? "bg-green-500/10 border-green-500/20 text-green-400"
-                  : "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    backendStatus === "available"
-                      ? "bg-green-500"
-                      : "bg-yellow-500"
-                  }`}
-                ></div>
-                {backendStatus === "available" ? "Full Features" : "Basic Mode"}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
         {/* Main Content Container */}
         <div className="relative z-10 w-full max-w-6xl mx-auto px-6">
           {/* Title */}
@@ -872,22 +690,6 @@ const Index = () => {
               CodePup
             </motion.h1>
           </motion.div>
-
-          {/* Backend Status Message */}
-          {backendStatus === "limited" && (
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.8, delay: 1.0 }}
-              className="mb-8 text-center"
-            >
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                Running in compatibility mode - some advanced features may be
-                unavailable
-              </div>
-            </motion.div>
-          )}
 
           {/* Content only visible when signed in */}
           <SignedIn>
@@ -1022,7 +824,6 @@ const Index = () => {
                   {projectStats.totalMessages > 0 && (
                     <div className="text-neutral-500 text-xs">
                       {projectStats.totalMessages} total messages
-                      {!hasSessionSupport && " (legacy)"}
                     </div>
                   )}
                 </div>
@@ -1041,27 +842,9 @@ const Index = () => {
                   />
                 </div>
               ) : projects.length > 0 ? (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {memoizedProjectCards}
-                  </div>
-                  {hasSessionSupport && loadingSessions && (
-                    <div className="flex items-center justify-center mt-4">
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{
-                          duration: 1,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
-                        className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full mr-2"
-                      />
-                      <span className="text-neutral-400 text-sm">
-                        Loading chat sessions...
-                      </span>
-                    </div>
-                  )}
-                </>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {memoizedProjectCards}
+                </div>
               ) : (
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -1130,4 +913,5 @@ const Index = () => {
     </>
   );
 };
+
 export default Index;
