@@ -119,7 +119,8 @@ const ChatPage: React.FC = () => {
   const [currentWorkflowStep, setCurrentWorkflowStep] = useState<string>("");
   const [workflowProgress, setWorkflowProgress] = useState(0);
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStepData[]>([]);
-const [isNavigating, setIsNavigating] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+
   // Streaming states
   const [isStreamingGeneration, setIsStreamingGeneration] = useState(false);
   const [streamingProgress, setStreamingProgress] = useState(0);
@@ -176,7 +177,7 @@ const [isNavigating, setIsNavigating] = useState(false);
       return passedUserId;
     }
 
-    const storedDbUser = localStorage.getItem('dbUser');
+    const storedDbUser = localStorage.getItem("dbUser");
     if (storedDbUser) {
       try {
         const parsedUser = JSON.parse(storedDbUser);
@@ -232,9 +233,9 @@ const [isNavigating, setIsNavigating] = useState(false);
 
   // Add workflow step
   const addWorkflowStep = useCallback((stepData: WorkflowStepData) => {
-    setWorkflowSteps(prev => [...prev, stepData]);
+    setWorkflowSteps((prev) => [...prev, stepData]);
     setCurrentWorkflowStep(stepData.step);
-    
+
     const stepMessage: Message = {
       id: `workflow-${Date.now()}`,
       content: `**${stepData.step}**: ${stepData.message}`,
@@ -243,311 +244,395 @@ const [isNavigating, setIsNavigating] = useState(false);
       workflowStep: stepData.step,
       stepData: stepData.data,
     };
-    
-    setMessages(prev => [...prev, stepMessage]);
+
+    setMessages((prev) => [...prev, stepMessage]);
   }, []);
 
   // Update workflow step
-  const updateWorkflowStep = useCallback((step: string, updates: Partial<WorkflowStepData>) => {
-    setWorkflowSteps(prev => 
-      prev.map(s => s.step === step ? { ...s, ...updates } : s)
-    );
-    
-    setMessages(prev => 
-      prev.map(msg => 
-        msg.workflowStep === step 
-          ? { ...msg, content: `**${step}**: ${updates.message || msg.content.split(': ')[1]}` }
-          : msg
-      )
-    );
-  }, []);
+  const updateWorkflowStep = useCallback(
+    (step: string, updates: Partial<WorkflowStepData>) => {
+      setWorkflowSteps((prev) =>
+        prev.map((s) => (s.step === step ? { ...s, ...updates } : s))
+      );
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.workflowStep === step
+            ? {
+                ...msg,
+                content: `**${step}**: ${
+                  updates.message || msg.content.split(": ")[1]
+                }`,
+              }
+            : msg
+        )
+      );
+    },
+    []
+  );
 
   // Complete workflow sequence
-  const startCompleteWorkflow = useCallback(async (userPrompt: string, projId: number) => {
-    if (isWorkflowActive || isGenerating.current) {
-      console.log("🔄 Workflow already in progress, skipping...");
-      return;
-    }
+  const startCompleteWorkflow = useCallback(
+    async (userPrompt: string, projId: number) => {
+      console.log(
+        `🚀 Starting complete workflow for project ${projId} with prompt: "${userPrompt}"`
+      );
 
-    if (!supabaseConfig || !supabaseConfig.supabaseUrl || !supabaseConfig.supabaseAnonKey) {
-      setError("Supabase configuration is missing. Please ensure backend is properly configured.");
-      return;
-    }
-
-    console.log(`🚀 Starting complete workflow for project ${projId}`);
-    
-    setIsWorkflowActive(true);
-    setIsLoading(true);
-    setError("");
-    setProjectStatus("loading");
-    setWorkflowProgress(0);
-    setWorkflowSteps([]);
-    isGenerating.current = true;
-
-    try {
-      // Step 1: Generate design files
-      addWorkflowStep({
-        step: "Design Generation",
-        message: "Generating design files and structure...",
-        isComplete: false,
-      });
-      setWorkflowProgress(20);
-
-      console.log(`🎨 Step 1: Calling /api/design/generate for project ${projId}`);
-      const generateResponse = await axios.post(`${baseUrl}/api/design/generate`, {
-        projectId: projId,
-      });
-
-      if (!generateResponse.data.success) {
-        throw new Error(generateResponse.data.error || "Failed to generate design files");
+      if (isWorkflowActive || isGenerating.current) {
+        console.log("🔄 Workflow already in progress, skipping...");
+        return;
       }
 
-      updateWorkflowStep("Design Generation", {
-        message: `✅ Generated ${generateResponse.data.files ? Object.keys(generateResponse.data.files).length : 0} design files successfully!`,
-        isComplete: true,
-        data: generateResponse.data,
-      });
-      setWorkflowProgress(40);
-
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Step 2: Plan structure
-      addWorkflowStep({
-        step: "Structure Planning",
-        message: "Planning file structure and documentation...",
-        isComplete: false,
-      });
-
-      console.log(`📋 Step 2: Calling /api/design/plan-structure for project ${projId}`);
-      const planResponse = await axios.post(`${baseUrl}/api/design/plan-structure`, {
-        projectId: projId,
-      });
-
-      if (!planResponse.data.success) {
-        throw new Error(planResponse.data.error || "Failed to plan structure");
+      if (
+        !supabaseConfig ||
+        !supabaseConfig.supabaseUrl ||
+        !supabaseConfig.supabaseAnonKey
+      ) {
+        setError(
+          "Supabase configuration is missing. Please ensure backend is properly configured."
+        );
+        return;
       }
 
-      updateWorkflowStep("Structure Planning", {
-        message: `✅ Planned structure with ${planResponse.data.totalFileCount || 0} files!`,
-        isComplete: true,
-        data: planResponse.data,
-      });
-      setWorkflowProgress(60);
+      setIsWorkflowActive(true);
+      setIsLoading(true);
+      setError("");
+      setProjectStatus("loading");
+      setWorkflowProgress(0);
+      setWorkflowSteps([]);
+      isGenerating.current = true;
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      try {
+        // Step 1: Generate design files
+        addWorkflowStep({
+          step: "Design Generation",
+          message: "Generating design files and structure...",
+          isComplete: false,
+        });
+        setWorkflowProgress(20);
 
-      // Step 3: Generate backend
-      addWorkflowStep({
-        step: "Backend Generation",
-        message: "Generating backend files, database schema, and API endpoints...",
-        isComplete: false,
-      });
+        console.log(
+          `🎨 Step 1: Calling /api/design/generate for project ${projId}`
+        );
+        const generateResponse = await axios.post(
+          `${baseUrl}/api/design/generate`,
+          {
+            projectId: projId,
+            prompt: userPrompt, // Include the prompt
+          }
+        );
 
-      console.log(`🏗️ Step 3: Calling /api/design/generate-backend for project ${projId}`);
-      const backendResponse = await axios.post(`${baseUrl}/api/design/generate-backend`, {
-        projectId: projId,
-      });
+        if (!generateResponse.data.success) {
+          throw new Error(
+            generateResponse.data.error || "Failed to generate design files"
+          );
+        }
 
-      if (!backendResponse.data.success) {
-        throw new Error(backendResponse.data.error || "Failed to generate backend");
+        updateWorkflowStep("Design Generation", {
+          message: `✅ Generated ${
+            generateResponse.data.files
+              ? Object.keys(generateResponse.data.files).length
+              : 0
+          } design files successfully!`,
+          isComplete: true,
+          data: generateResponse.data,
+        });
+        setWorkflowProgress(40);
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Step 2: Plan structure
+        addWorkflowStep({
+          step: "Structure Planning",
+          message: "Planning file structure and documentation...",
+          isComplete: false,
+        });
+
+        console.log(
+          `📋 Step 2: Calling /api/design/plan-structure for project ${projId}`
+        );
+        const planResponse = await axios.post(
+          `${baseUrl}/api/design/plan-structure`,
+          {
+            projectId: projId,
+          }
+        );
+
+        if (!planResponse.data.success) {
+          throw new Error(
+            planResponse.data.error || "Failed to plan structure"
+          );
+        }
+
+        updateWorkflowStep("Structure Planning", {
+          message: `✅ Planned structure with ${
+            planResponse.data.totalFileCount || 0
+          } files!`,
+          isComplete: true,
+          data: planResponse.data,
+        });
+        setWorkflowProgress(60);
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Step 3: Generate backend
+        addWorkflowStep({
+          step: "Backend Generation",
+          message:
+            "Generating backend files, database schema, and API endpoints...",
+          isComplete: false,
+        });
+
+        console.log(
+          `🏗️ Step 3: Calling /api/design/generate-backend for project ${projId}`
+        );
+        const backendResponse = await axios.post(
+          `${baseUrl}/api/design/generate-backend`,
+          {
+            projectId: projId,
+          }
+        );
+
+        if (!backendResponse.data.success) {
+          throw new Error(
+            backendResponse.data.error || "Failed to generate backend"
+          );
+        }
+
+        updateWorkflowStep("Backend Generation", {
+          message: `✅ Generated backend with database schema and ${
+            backendResponse.data.files
+              ? Object.keys(backendResponse.data.files).length
+              : 0
+          } files!`,
+          isComplete: true,
+          data: backendResponse.data,
+        });
+        setWorkflowProgress(80);
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Step 4: Generate frontend (streaming)
+        addWorkflowStep({
+          step: "Frontend Generation",
+          message: "Starting frontend generation with streaming deployment...",
+          isComplete: false,
+        });
+
+        console.log(
+          `🎨 Step 4: Starting streaming frontend generation for project ${projId}`
+        );
+        await startStreamingFrontendGeneration(projId);
+      } catch (error) {
+        console.error("❌ Workflow failed:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Workflow failed";
+        setError(errorMessage);
+        setIsWorkflowActive(false);
+        setProjectStatus("error");
+
+        if (currentWorkflowStep) {
+          updateWorkflowStep(currentWorkflowStep, {
+            message: `❌ Failed: ${errorMessage}`,
+            isComplete: true,
+            error: errorMessage,
+          });
+        }
+      } finally {
+        isGenerating.current = false;
+        setIsLoading(false);
       }
+    },
+    [
+      isWorkflowActive,
+      addWorkflowStep,
+      updateWorkflowStep,
+      currentWorkflowStep,
+      baseUrl,
+      supabaseConfig,
+    ]
+  );
 
-      updateWorkflowStep("Backend Generation", {
-        message: `✅ Generated backend with database schema and ${backendResponse.data.files ? Object.keys(backendResponse.data.files).length : 0} files!`,
-        isComplete: true,
-        data: backendResponse.data,
+  // Streaming frontend generation
+  const startStreamingFrontendGeneration = useCallback(
+    async (projId: number) => {
+      setIsStreamingGeneration(true);
+      setStreamingProgress(0);
+      setStreamingPhase("initializing");
+      setStreamingMessage("Starting frontend generation...");
+      setStreamingStats({
+        totalCharacters: 0,
+        chunksReceived: 0,
+        estimatedTotalChunks: 0,
+        startTime: Date.now(),
       });
-      setWorkflowProgress(80);
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      try {
+        console.log(
+          `🎨 Starting streaming frontend generation for project ${projId}`
+        );
 
-      // Step 4: Generate frontend (streaming)
-      addWorkflowStep({
-        step: "Frontend Generation",
-        message: "Starting frontend generation with streaming deployment...",
-        isComplete: false,
-      });
+        if (!supabaseConfig) {
+          throw new Error("Supabase configuration is missing");
+        }
 
-      console.log(`🎨 Step 4: Starting streaming frontend generation for project ${projId}`);
-      await startStreamingFrontendGeneration(projId);
+        const response = await fetch(
+          `${baseUrl}/api/design/generate-frontend`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              projectId: projId,
+              supabaseUrl: supabaseConfig.supabaseUrl,
+              supabaseAnonKey: supabaseConfig.supabaseAnonKey,
+              supabaseToken: supabaseConfig.supabaseToken,
+              databaseUrl: supabaseConfig.databaseUrl,
+              userId: getCurrentUserId(),
+              clerkId: clerkId,
+            }),
+          }
+        );
 
-    } catch (error) {
-      console.error("❌ Workflow failed:", error);
-      const errorMessage = error instanceof Error ? error.message : "Workflow failed";
-      setError(errorMessage);
-      setIsWorkflowActive(false);
-      setProjectStatus("error");
-      
-      if (currentWorkflowStep) {
-        updateWorkflowStep(currentWorkflowStep, {
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `HTTP error! status: ${response.status}, message: ${errorText}`
+          );
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("No response body");
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data: StreamingProgressData = JSON.parse(line.slice(6));
+                handleStreamingData(data, projId);
+              } catch (e) {
+                console.warn("Error parsing streaming data:", e);
+              }
+            }
+          }
+        }
+
+        console.log("✅ Streaming frontend generation completed");
+      } catch (error) {
+        console.error("❌ Streaming frontend generation failed:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Frontend generation failed";
+        setError(errorMessage);
+        setIsStreamingGeneration(false);
+        setIsWorkflowActive(false);
+        setProjectStatus("error");
+
+        updateWorkflowStep("Frontend Generation", {
           message: `❌ Failed: ${errorMessage}`,
           isComplete: true,
           error: errorMessage,
         });
       }
-    } finally {
-      isGenerating.current = false;
-      setIsLoading(false);
-    }
-  }, [isWorkflowActive, addWorkflowStep, updateWorkflowStep, currentWorkflowStep, baseUrl, supabaseConfig]);
-
-  // Streaming frontend generation
-  const startStreamingFrontendGeneration = useCallback(async (projId: number) => {
-    setIsStreamingGeneration(true);
-    setStreamingProgress(0);
-    setStreamingPhase("initializing");
-    setStreamingMessage("Starting frontend generation...");
-    setStreamingStats({
-      totalCharacters: 0,
-      chunksReceived: 0,
-      estimatedTotalChunks: 0,
-      startTime: Date.now(),
-    });
-
-    try {
-      console.log(`🎨 Starting streaming frontend generation for project ${projId}`);
-
-      if (!supabaseConfig) {
-        throw new Error("Supabase configuration is missing");
-      }
-
-      const response = await fetch(`${baseUrl}/api/design/generate-frontend`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          projectId: projId,
-          supabaseUrl: supabaseConfig.supabaseUrl,
-          supabaseAnonKey: supabaseConfig.supabaseAnonKey,
-          supabaseToken: supabaseConfig.supabaseToken,
-          databaseUrl: supabaseConfig.databaseUrl,
-          userId: getCurrentUserId(),
-          clerkId: clerkId,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("No response body");
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data: StreamingProgressData = JSON.parse(line.slice(6));
-              handleStreamingData(data, projId);
-            } catch (e) {
-              console.warn("Error parsing streaming data:", e);
-            }
-          }
-        }
-      }
-
-      console.log("✅ Streaming frontend generation completed");
-    } catch (error) {
-      console.error("❌ Streaming frontend generation failed:", error);
-      const errorMessage = error instanceof Error ? error.message : "Frontend generation failed";
-      setError(errorMessage);
-      setIsStreamingGeneration(false);
-      setIsWorkflowActive(false);
-      setProjectStatus("error");
-      
-      updateWorkflowStep("Frontend Generation", {
-        message: `❌ Failed: ${errorMessage}`,
-        isComplete: true,
-        error: errorMessage,
-      });
-    }
-  }, [baseUrl, supabaseConfig, getCurrentUserId, clerkId, updateWorkflowStep]);
+    },
+    [baseUrl, supabaseConfig, getCurrentUserId, clerkId, updateWorkflowStep]
+  );
 
   // Handle streaming data
-  const handleStreamingData = useCallback((data: StreamingProgressData, projId: number) => {
-    console.log("📡 Frontend streaming data received:", data.type, data.message);
+  const handleStreamingData = useCallback(
+    (data: StreamingProgressData, projId: number) => {
+      console.log(
+        "📡 Frontend streaming data received:",
+        data.type,
+        data.message
+      );
 
-    switch (data.type) {
-      case "progress":
-        setStreamingProgress(data.percentage || 0);
-        setStreamingPhase(data.phase || "");
-        setStreamingMessage(data.message || "");
-        
-        updateWorkflowStep("Frontend Generation", {
-          message: `${data.message} (${(data.percentage || 0).toFixed(0)}%)`,
-          isComplete: false,
-        });
-        break;
-
-      case "length":
-        setStreamingStats((prev) => ({
-          ...prev,
-          totalCharacters: data.currentLength || 0,
-          bytesPerSecond: prev.startTime
-            ? (data.currentLength || 0) / ((Date.now() - prev.startTime) / 1000)
-            : 0,
-        }));
-        setStreamingProgress(data.percentage || 0);
-        break;
-
-      case "chunk":
-        if (data.chunk) {
-          setStreamingStats((prev) => ({
-            ...prev,
-            chunksReceived: prev.chunksReceived + 1,
-            totalCharacters: data.currentLength || prev.totalCharacters,
-            estimatedTotalChunks: Math.ceil((data.totalLength || 0) / 10000),
-          }));
-        }
-        break;
-
-      case "complete":
-        setStreamingProgress(100);
-        setStreamingPhase("complete");
-        setStreamingMessage(data.message || "Frontend generation completed!");
-        setStreamingStats((prev) => ({
-          ...prev,
-          endTime: Date.now(),
-        }));
-        break;
-
-      case "result":
-        if (data.result) {
-          setPreviewUrl(data.result.previewUrl);
-          setProjectStatus("ready");
-          setIsStreamingGeneration(false);
-          setIsWorkflowActive(false);
-          setWorkflowProgress(100);
+      switch (data.type) {
+        case "progress":
+          setStreamingProgress(data.percentage || 0);
+          setStreamingPhase(data.phase || "");
+          setStreamingMessage(data.message || "");
 
           updateWorkflowStep("Frontend Generation", {
-            message: `✅ Frontend deployed successfully! Files generated: ${data.result.files?.length || 0}`,
-            isComplete: true,
-            data: data.result,
+            message: `${data.message} (${(data.percentage || 0).toFixed(0)}%)`,
+            isComplete: false,
           });
+          break;
 
-          const completionMessage: Message = {
-            id: `completion-${Date.now()}`,
-            content: `🎉 **Complete Application Generated Successfully!**
+        case "length":
+          setStreamingStats((prev) => ({
+            ...prev,
+            totalCharacters: data.currentLength || 0,
+            bytesPerSecond: prev.startTime
+              ? (data.currentLength || 0) /
+                ((Date.now() - prev.startTime) / 1000)
+              : 0,
+          }));
+          setStreamingProgress(data.percentage || 0);
+          break;
+
+        case "chunk":
+          if (data.chunk) {
+            setStreamingStats((prev) => ({
+              ...prev,
+              chunksReceived: prev.chunksReceived + 1,
+              totalCharacters: data.currentLength || prev.totalCharacters,
+              estimatedTotalChunks: Math.ceil((data.totalLength || 0) / 10000),
+            }));
+          }
+          break;
+
+        case "complete":
+          setStreamingProgress(100);
+          setStreamingPhase("complete");
+          setStreamingMessage(data.message || "Frontend generation completed!");
+          setStreamingStats((prev) => ({
+            ...prev,
+            endTime: Date.now(),
+          }));
+          break;
+
+        case "result":
+          if (data.result) {
+            setPreviewUrl(data.result.previewUrl);
+            setProjectStatus("ready");
+            setIsStreamingGeneration(false);
+            setIsWorkflowActive(false);
+            setWorkflowProgress(100);
+
+            updateWorkflowStep("Frontend Generation", {
+              message: `✅ Frontend deployed successfully! Files generated: ${
+                data.result.files?.length || 0
+              }`,
+              isComplete: true,
+              data: data.result,
+            });
+
+            const completionMessage: Message = {
+              id: `completion-${Date.now()}`,
+              content: `🎉 **Complete Application Generated Successfully!**
 
 **📊 Generation Summary:**
 - **Design Files**: Generated with Tailwind config and styling
-- **File Structure**: ${data.result.structure?.fileCount || 'Multiple'} files planned and organized  
+- **File Structure**: ${
+                data.result.structure?.fileCount || "Multiple"
+              } files planned and organized  
 - **Backend**: Database schema, migrations, and API types created
-- **Frontend**: ${data.result.files?.length || 0} React components with TypeScript
+- **Frontend**: ${
+                data.result.files?.length || 0
+              } React components with TypeScript
 - **Deployment**: Live application deployed to Azure Static Web Apps
 
 **🚀 Your Application:**
@@ -565,181 +650,201 @@ const [isNavigating, setIsNavigating] = useState(false);
 - Staging environments for testing
 
 Your application is now live and ready to use!`,
-            type: "assistant",
-            timestamp: new Date(),
-          };
-          setMessages((prev) => [...prev, completionMessage]);
-          
-          if (data.result.projectId) {
-            setCurrentProjectInfo({
-              id: data.result.projectId,
-              name: `Generated Project`,
-              isVerified: true,
-            });
-            setCurrentProject({
-              id: data.result.projectId,
-              name: `Complete Application`,
-              deploymentUrl: data.result.previewUrl,
-              status: "ready",
-            });
-          }
-        }
-        break;
+              type: "assistant",
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, completionMessage]);
 
-      case "error":
-        setError(data.error || "Frontend generation failed");
-        setIsStreamingGeneration(false);
-        setIsWorkflowActive(false);
-        setProjectStatus("error");
-        
-        updateWorkflowStep("Frontend Generation", {
-          message: `❌ Failed: ${data.error || "Unknown error"}`,
-          isComplete: true,
-          error: data.error || "Unknown error",
-        });
-        break;
-    }
-  }, [updateWorkflowStep]);
+            if (data.result.projectId) {
+              setCurrentProjectInfo({
+                id: data.result.projectId,
+                name: `Generated Project`,
+                isVerified: true,
+              });
+              setCurrentProject({
+                id: data.result.projectId,
+                name: `Complete Application`,
+                deploymentUrl: data.result.previewUrl,
+                status: "ready",
+              });
+            }
+          }
+          break;
+
+        case "error":
+          setError(data.error || "Frontend generation failed");
+          setIsStreamingGeneration(false);
+          setIsWorkflowActive(false);
+          setProjectStatus("error");
+
+          updateWorkflowStep("Frontend Generation", {
+            message: `❌ Failed: ${data.error || "Unknown error"}`,
+            isComplete: true,
+            error: data.error || "Unknown error",
+          });
+          break;
+      }
+    },
+    [updateWorkflowStep]
+  );
 
   // Handle modification streaming for existing projects
-  const handleStreamingResponse = useCallback(async (currentPrompt: string) => {
-    console.log("🔧 MODIFICATION ENDPOINT CALLED!");
-    
-    try {
-      setIsStreamingResponse(true);
+  const handleStreamingResponse = useCallback(
+    async (currentPrompt: string) => {
+      console.log("🔧 MODIFICATION ENDPOINT CALLED!");
 
-      const streamingMessage: Message = {
-        id: `streaming-${Date.now()}`,
-        content: "",
-        type: "assistant",
-        timestamp: new Date(),
-        isStreaming: true,
-      };
+      try {
+        setIsStreamingResponse(true);
 
-      setMessages((prev) => [...prev, streamingMessage]);
+        const streamingMessage: Message = {
+          id: `streaming-${Date.now()}`,
+          content: "",
+          type: "assistant",
+          timestamp: new Date(),
+          isStreaming: true,
+        };
 
-      const deployedUrl = getDeployedAppUrl();
-      const userId = getCurrentUserId();
+        setMessages((prev) => [...prev, streamingMessage]);
 
-      const response = await fetch(`${baseUrl}/api/modify/stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: currentPrompt,
-          userId: userId,
-          projectId: currentProjectInfo.id || projectId,
-          currentUrl: window.location.href,
-          deployedUrl: deployedUrl,
-          projectStructure: value,
-          clerkId: clerkId,
-        }),
-      });
+        const deployedUrl = getDeployedAppUrl();
+        const userId = getCurrentUserId();
 
-      if (!response.ok) {
-        throw new Error(`Streaming request failed with status: ${response.status}`);
-      }
+        const response = await fetch(`${baseUrl}/api/modify/stream`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt: currentPrompt,
+            userId: userId,
+            projectId: currentProjectInfo.id || projectId,
+            currentUrl: window.location.href,
+            deployedUrl: deployedUrl,
+            projectStructure: value,
+            clerkId: clerkId,
+          }),
+        });
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("No response body");
-      }
+        if (!response.ok) {
+          throw new Error(
+            `Streaming request failed with status: ${response.status}`
+          );
+        }
 
-      let accumulatedContent = "";
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("No response body");
+        }
 
-      while (true) {
-        const { done, value: chunk } = await reader.read();
-        if (done) break;
+        let accumulatedContent = "";
 
-        const text = new TextDecoder().decode(chunk);
-        const lines = text.split("\n");
+        while (true) {
+          const { done, value: chunk } = await reader.read();
+          if (done) break;
 
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            continue;
-          }
-          
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
+          const text = new TextDecoder().decode(chunk);
+          const lines = text.split("\n");
 
-              if (data.step && data.message) {
-                const progressMessage = `Step ${data.step}/${data.total}: ${data.message}`;
-                accumulatedContent = progressMessage;
-                
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === streamingMessage.id
-                      ? { ...msg, content: accumulatedContent }
-                      : msg
-                  )
-                );
-              } else if (data.success && data.data) {
-                const completionMessage = `✅ Modification completed successfully!\n\n**Project Updated:**\n- Project ID: ${data.data.projectId}\n- Build ID: ${data.data.buildId}\n\n[View Live Preview](${data.data.previewUrl})`;
-                
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === streamingMessage.id
-                      ? { ...msg, content: completionMessage, isStreaming: false }
-                      : msg
-                  )
-                );
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              continue;
+            }
 
-                if (data.data.previewUrl) {
-                  setPreviewUrl(data.data.previewUrl);
-                  setProjectStatus("ready");
-                  
-                  setCurrentProject(prev => prev ? {
-                    ...prev,
-                    deploymentUrl: data.data.previewUrl,
-                    status: "ready"
-                  } : null);
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+
+                if (data.step && data.message) {
+                  const progressMessage = `Step ${data.step}/${data.total}: ${data.message}`;
+                  accumulatedContent = progressMessage;
+
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === streamingMessage.id
+                        ? { ...msg, content: accumulatedContent }
+                        : msg
+                    )
+                  );
+                } else if (data.success && data.data) {
+                  const completionMessage = `✅ Modification completed successfully!\n\n**Project Updated:**\n- Project ID: ${data.data.projectId}\n- Build ID: ${data.data.buildId}\n\n[View Live Preview](${data.data.previewUrl})`;
+
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === streamingMessage.id
+                        ? {
+                            ...msg,
+                            content: completionMessage,
+                            isStreaming: false,
+                          }
+                        : msg
+                    )
+                  );
+
+                  if (data.data.previewUrl) {
+                    setPreviewUrl(data.data.previewUrl);
+                    setProjectStatus("ready");
+
+                    setCurrentProject((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            deploymentUrl: data.data.previewUrl,
+                            status: "ready",
+                          }
+                        : null
+                    );
+                  }
+                  break;
+                } else if (data.error) {
+                  throw new Error(data.error);
                 }
-                break;
-              } else if (data.error) {
-                throw new Error(data.error);
+              } catch (e) {
+                console.warn("Error parsing modification data:", e);
               }
-            } catch (e) {
-              console.warn("Error parsing modification data:", e);
             }
           }
         }
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === streamingMessage.id
+              ? { ...msg, isStreaming: false }
+              : msg
+          )
+        );
+
+        if (currentProject?.id) {
+          await loadProject(currentProject.id);
+        }
+      } catch (error) {
+        console.error("❌ Error in streaming response:", error);
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== streamingMessage.id)
+        );
+
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content:
+            "Sorry, I encountered an error while processing your request.",
+          type: "assistant",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsStreamingResponse(false);
       }
-
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === streamingMessage.id ? { ...msg, isStreaming: false } : msg
-        )
-      );
-
-      if (currentProject?.id) {
-        await loadProject(currentProject.id);
-      }
-    } catch (error) {
-      console.error("❌ Error in streaming response:", error);
-      setMessages((prev) => prev.filter((msg) => msg.id !== streamingMessage.id));
-
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: "Sorry, I encountered an error while processing your request.",
-        type: "assistant",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsStreamingResponse(false);
-    }
-  }, [
-    baseUrl,
-    value,
-    projectId,
-    currentProjectInfo.id,
-    getDeployedAppUrl,
-    getCurrentUserId,
-    currentProject?.id,
-    clerkId,
-  ]);
+    },
+    [
+      baseUrl,
+      value,
+      projectId,
+      currentProjectInfo.id,
+      getDeployedAppUrl,
+      getCurrentUserId,
+      currentProject?.id,
+      clerkId,
+    ]
+  );
 
   // Server health check
   const checkServerHealth = useCallback(async () => {
@@ -761,7 +866,9 @@ Your application is now live and ready to use!`,
 
       if (axios.isAxiosError(error)) {
         if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
-          setError("Backend server is not responding. Please ensure it's running on the correct port.");
+          setError(
+            "Backend server is not responding. Please ensure it's running on the correct port."
+          );
         } else {
           setError(`Server error: ${error.response?.status || "Unknown"}`);
         }
@@ -773,121 +880,128 @@ Your application is now live and ready to use!`,
   }, [baseUrl, isServerHealthy]);
 
   // Load project details
-  const loadProject = useCallback(async (projId: number) => {
-    if (currentProjectId.current === projId && projectStatus !== "idle") {
-      return;
-    }
-
-    setError("");
-    setProjectStatus("fetching");
-    currentProjectId.current = projId;
-
-    try {
-      const res = await axios.get<Project>(`${baseUrl}/api/projects/${projId}`);
-      const project = res.data;
-
-      setCurrentProject(project);
-      setCurrentProjectInfo({
-        id: projId,
-        name: project.name || `Project ${projId}`,
-        isVerified: true,
-      });
-
-      if (project.deploymentUrl) {
-        setPreviewUrl(project.deploymentUrl);
+  const loadProject = useCallback(
+    async (projId: number) => {
+      if (currentProjectId.current === projId && projectStatus !== "idle") {
+        return;
       }
 
-      if (project.status === "ready") {
-        setProjectStatus("ready");
-      } else if (project.status === "regenerating") {
-        setProjectStatus("ready");
-      } else if (project.status === "building" || project.status === "pending") {
-        setProjectStatus("loading");
-      } else if (project.status === "error") {
+      console.log(`📂 Loading project ${projId}...`);
+      setError("");
+      setProjectStatus("fetching");
+      currentProjectId.current = projId;
+
+      try {
+        const res = await axios.get<Project>(
+          `${baseUrl}/api/projects/${projId}`
+        );
+        const project = res.data;
+
+        console.log(`📂 Project ${projId} loaded:`, project);
+        setCurrentProject(project);
+        setCurrentProjectInfo({
+          id: projId,
+          name: project.name || `Project ${projId}`,
+          isVerified: true,
+        });
+
         if (project.deploymentUrl) {
+          setPreviewUrl(project.deploymentUrl);
           setProjectStatus("ready");
         } else {
-          setError("Project build failed. Please try regenerating the project.");
-          setProjectStatus("error");
+          // Project exists but no deployment URL
+          setProjectStatus("idle");
         }
-      } else {
-  console.log("📝 Project found but deployment not ready");
-  if (fromWorkflow && navPrompt) {
-    console.log("🚀 Starting complete workflow from navigation");
-    await startCompleteWorkflow(navPrompt, projId);
-  } else if (navPrompt) {
-    console.log("🎨 Starting workflow with navigation prompt");
-    await startCompleteWorkflow(navPrompt, projId);
-  } else {
-    console.log("📋 Project exists but needs generation");
-    setProjectStatus("idle");
-    // Don't set error, just wait for user input
-  }
-}
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
-        setError(`Project with ID ${projId} not found.`);
-      } else {
-        setError("Failed to load project");
+      } catch (error) {
+        console.error(`❌ Failed to load project ${projId}:`, error);
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          setError(`Project with ID ${projId} not found.`);
+        } else {
+          setError("Failed to load project");
+        }
+        setProjectStatus("error");
       }
-      setProjectStatus("error");
-    }
-  }, [baseUrl, projectStatus, navPrompt, fromWorkflow, startCompleteWorkflow]);
+    },
+    [baseUrl, projectStatus]
+  );
 
   // Load project messages
-  const loadProjectMessages = useCallback(async (projectId: number) => {
-    if (projectLoaded.current) {
-      return;
-    }
-
-    try {
-      const response = await axios.get(`${baseUrl}/api/messages/project/${projectId}`);
-
-      if (response.data.success && response.data.data) {
-        const history = response.data.data;
-        const formattedMessages: Message[] = history.map((msg: any) => ({
-          id: msg.id || Date.now().toString(),
-          content: msg.content,
-          type: msg.role === "user" ? "user" : "assistant",
-          timestamp: new Date(msg.createdAt || msg.timestamp),
-        }));
-
-        setMessages(formattedMessages);
-      } else {
-        setMessages([]);
+  const loadProjectMessages = useCallback(
+    async (projectId: number) => {
+      if (projectLoaded.current) {
+        return;
       }
-      projectLoaded.current = true;
-    } catch (error) {
-      setMessages([]);
-      projectLoaded.current = true;
-    }
-  }, [baseUrl]);
+
+      console.log(`📨 Loading messages for project ${projectId}...`);
+      try {
+        const response = await axios.get(
+          `${baseUrl}/api/messages/project/${projectId}`
+        );
+
+        if (response.data.success && response.data.data) {
+          const history = response.data.data;
+          const formattedMessages: Message[] = history.map((msg: any) => ({
+            id: msg.id || Date.now().toString(),
+            content: msg.content,
+            type: msg.role === "user" ? "user" : "assistant",
+            timestamp: new Date(msg.createdAt || msg.timestamp),
+          }));
+
+          setMessages(formattedMessages);
+          console.log(
+            `📨 Loaded ${formattedMessages.length} messages for project ${projectId}`
+          );
+        } else {
+          setMessages([]);
+        }
+        projectLoaded.current = true;
+      } catch (error) {
+        console.warn(
+          `⚠️ Could not load messages for project ${projectId}:`,
+          error
+        );
+        setMessages([]);
+        projectLoaded.current = true;
+      }
+    },
+    [baseUrl]
+  );
 
   // Save message to backend
-  const saveMessage = useCallback(async (content: string, role: "user" | "assistant") => {
-    if (!projectId) return;
+  const saveMessage = useCallback(
+    async (content: string, role: "user" | "assistant") => {
+      if (!projectId) return;
 
-    try {
-      await axios.post(`${baseUrl}/api/messages`, {
-        projectId,
-        role,
-        content,
-        metadata: {
+      try {
+        await axios.post(`${baseUrl}/api/messages`, {
           projectId,
-          userId: getCurrentUserId(),
-          clerkId: clerkId,
-          timestamp: new Date().toISOString(),
-        },
-      });
-    } catch (error) {
-      console.warn("Could not save message:", error);
-    }
-  }, [baseUrl, projectId, getCurrentUserId, clerkId]);
+          role,
+          content,
+          metadata: {
+            projectId,
+            userId: getCurrentUserId(),
+            clerkId: clerkId,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      } catch (error) {
+        console.warn("Could not save message:", error);
+      }
+    },
+    [baseUrl, projectId, getCurrentUserId, clerkId]
+  );
 
   // Handle user prompt submission
   const handleSubmit = useCallback(async () => {
-    if (!prompt.trim() || isLoading || isStreamingGeneration || isWorkflowActive) return;
+    if (
+      !prompt.trim() ||
+      isLoading ||
+      isStreamingGeneration ||
+      isWorkflowActive
+    )
+      return;
 
+    console.log("📝 User submitted prompt:", prompt);
     setIsLoading(true);
     setError("");
 
@@ -905,16 +1019,26 @@ Your application is now live and ready to use!`,
     await saveMessage(currentPrompt, "user");
 
     try {
-      const shouldUseModification = currentProject && 
-                                   (currentProject.status === "ready" || 
-                                    currentProject.status === "regenerating") &&
-                                   currentProject.deploymentUrl &&
-                                   currentProject.deploymentUrl.trim() !== "" &&
-                                   !fromWorkflow;
+      const shouldUseModification =
+        currentProject &&
+        (currentProject.status === "ready" ||
+          currentProject.status === "regenerating") &&
+        currentProject.deploymentUrl &&
+        currentProject.deploymentUrl.trim() !== "";
 
-      if (shouldUseModification) {
+      console.log("🔄 Workflow decision:", {
+        currentProject: currentProject?.id,
+        status: currentProject?.status,
+        hasDeploymentUrl: !!currentProject?.deploymentUrl,
+        shouldUseModification,
+        fromWorkflow,
+      });
+
+      if (shouldUseModification && !fromWorkflow) {
+        console.log("🔧 Using modification workflow for existing project");
         await handleStreamingResponse(currentPrompt);
       } else {
+        console.log("🚀 Using complete workflow for new/incomplete project");
         if (projectId) {
           await startCompleteWorkflow(currentPrompt, projectId);
         } else {
@@ -922,6 +1046,7 @@ Your application is now live and ready to use!`,
         }
       }
     } catch (error) {
+      console.error("❌ Error in handleSubmit:", error);
       setError("Failed to process request");
 
       const errorMessage: Message = {
@@ -934,7 +1059,7 @@ Your application is now live and ready to use!`,
       setMessages((prev) => [...prev, errorMessage]);
       await saveMessage(errorMessage.content, "assistant");
     } finally {
-setIsLoading(false);
+      setIsLoading(false);
     }
   }, [
     prompt,
@@ -959,9 +1084,12 @@ setIsLoading(false);
     [handleSubmit]
   );
 
-  const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setPrompt(e.target.value);
-  }, []);
+  const handlePromptChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setPrompt(e.target.value);
+    },
+    []
+  );
 
   // Clear conversation
   const clearConversation = useCallback(async () => {
@@ -1008,7 +1136,9 @@ setIsLoading(false);
         hasInitialized.current = true;
       }
     } catch (error) {
-      setError("Still cannot connect to server. Please check your backend setup.");
+      setError(
+        "Still cannot connect to server. Please check your backend setup."
+      );
       setProjectStatus("error");
     } finally {
       setIsRetrying(false);
@@ -1031,7 +1161,7 @@ setIsLoading(false);
     isGenerating.current = false;
     setStreamingPhase("stopped");
     setStreamingMessage("Process stopped by user");
-    
+
     if (currentWorkflowStep) {
       updateWorkflowStep(currentWorkflowStep, {
         message: "⏹️ Process stopped by user",
@@ -1050,170 +1180,92 @@ setIsLoading(false);
   // Format bytes per second
   const formatSpeed = useCallback((bytesPerSecond: number) => {
     if (bytesPerSecond < 1024) return `${bytesPerSecond.toFixed(0)} B/s`;
-    if (bytesPerSecond < 1024 * 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+    if (bytesPerSecond < 1024 * 1024)
+      return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
     return `${(bytesPerSecond / (1024 * 1024)).toFixed(2)} MB/s`;
   }, []);
 
-  // MAIN INITIALIZATION
-  // REPLACE the main initialization useEffect with this:
-useEffect(() => {
-  if (hasInitialized.current) {
-    return;
-  }
-
-  hasInitialized.current = true;
-
-  const initialize = async () => {
-    console.log("🚀 Starting ChatPage initialization...");
-    console.log("📋 Navigation state:", { projectId, existingProject, fromWorkflow, navPrompt });
-
-    // Set navigating state for smooth transitions
-    if (fromWorkflow || navPrompt) {
-      setIsNavigating(true);
-    }
-
-    const serverHealthy = await checkServerHealth();
-    if (!serverHealthy) {
-      setProjectStatus("error");
-      setIsNavigating(false);
+  // SINGLE UNIFIED INITIALIZATION
+  useEffect(() => {
+    if (hasInitialized.current) {
       return;
     }
 
-    try {
-      if (existingProject && projectId) {
-        console.log("📂 Loading existing project...");
-        await loadProject(projectId);
-        await loadProjectMessages(projectId);
-      } else if (fromWorkflow && navPrompt && projectId) {
-        console.log("🎨 Starting complete workflow from navigation...");
-        // Don't set prompt here, let the workflow handle it
-        await startCompleteWorkflow(navPrompt, projectId);
-      } else if (navPrompt && projectId) {
-        console.log("🚀 Starting workflow with prompt...");
-        setPrompt(navPrompt);
-        await startCompleteWorkflow(navPrompt, projectId);
-      } else if (projectId) {
-        console.log("🔍 Loading project preview only...");
-        await loadProject(projectId);
-        await loadProjectMessages(projectId);
-      } else {
-        console.log("⭐ Ready for user input");
-        setProjectStatus("idle");
-      }
-    } catch (error) {
-      console.error("❌ Initialization error:", error);
-      setError("Failed to initialize project");
-      setProjectStatus("error");
-    } finally {
-      setIsNavigating(false);
-    }
+    hasInitialized.current = true;
 
-    console.log("✅ ChatPage initialization complete");
-  };
-
-  initialize();
-}, [
-  checkServerHealth,
-  loadProject,
-  loadProjectMessages,
-  startCompleteWorkflow,
-  existingProject,
-  projectId,
-  fromWorkflow,
-  navPrompt,
-]);
-
-useEffect(() => {
-  // Handle navigation from index page
-  const handleIndexNavigation = async () => {
-    // Check if we're coming from index page with required data
-    if (fromWorkflow && projectId && navPrompt && !hasInitialized.current) {
-      console.log("🚀 Detected navigation from index page with:", {
+    const initialize = async () => {
+      console.log("🚀 ChatPage initialization started");
+      console.log("📋 Navigation state:", {
         projectId,
         existingProject,
-        navPrompt,
-        fromWorkflow
+        fromWorkflow,
+        navPrompt: navPrompt ? `"${navPrompt.substring(0, 50)}..."` : null,
+        supabaseConfigExists: !!supabaseConfig,
       });
 
-      hasInitialized.current = true;
-
-      // Add the initial user message
-      const userMessage: Message = {
-        id: `user-${Date.now()}`,
-        content: navPrompt,
-        type: "user",
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, userMessage]);
-
-      // Determine which workflow to start based on existingProject flag
-      if (existingProject) {
-        // For existing projects, start modification workflow
-        console.log("🔧 Starting modification workflow for existing project");
-        await handleStreamingResponse(navPrompt);
-      } else {
-        // For new projects, start complete workflow
-        console.log("🚀 Starting complete workflow for new project");
-        await startCompleteWorkflow(navPrompt, projectId);
+      // Set navigating state for smooth transitions
+      if (fromWorkflow || navPrompt) {
+        setIsNavigating(true);
       }
-    }
-  };
 
-  handleIndexNavigation();
-}, [
-  fromWorkflow,
-  projectId,
-  navPrompt,
-  existingProject,
-  hasInitialized,
-  handleStreamingResponse,
-  startCompleteWorkflow
-]);
+      // Health check first
+      const serverHealthy = await checkServerHealth();
+      if (!serverHealthy) {
+        setProjectStatus("error");
+        setIsNavigating(false);
+        return;
+      }
 
-// Also add this helper function to determine workflow type
-const determineWorkflowType = useCallback(() => {
-  if (existingProject && projectId) {
-    return 'modification';
-  } else if (projectId && navPrompt) {
-    return 'complete';
-  }
-  return 'none';
-}, [existingProject, projectId, navPrompt]);
-  // Handle navigation prompt on mount for workflow
-useEffect(() => {
-  const initializeFromNavigation = async () => {
-    // Only run if we haven't initialized and have navigation data
-    if (!hasInitialized.current && navPrompt && projectId) {
-      const workflowType = determineWorkflowType();
-      
-      if (workflowType !== 'none') {
-        hasInitialized.current = true;
-        
-        // Add user message
-        const userMessage: Message = {
-          id: `user-${Date.now()}`,
-          content: navPrompt,
-          type: "user",
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, userMessage]);
+      try {
+        // Determine what to do based on the navigation state
+        if (fromWorkflow && navPrompt && projectId) {
+          console.log("🎨 WORKFLOW FROM INDEX: Starting complete workflow");
+          // Add the user message first
+          const userMessage: Message = {
+            id: `user-${Date.now()}`,
+            content: navPrompt,
+            type: "user",
+            timestamp: new Date(),
+          };
+          setMessages([userMessage]);
 
-        // Start appropriate workflow
-        if (workflowType === 'modification') {
-          console.log("🔧 Starting modification workflow");
-          await handleStreamingResponse(navPrompt);
-        } else if (workflowType === 'complete') {
-          console.log("🚀 Starting complete workflow");
+          // Load project first, then start workflow
+          await loadProject(projectId);
           await startCompleteWorkflow(navPrompt, projectId);
+        } else if (existingProject && projectId) {
+          console.log("📂 EXISTING PROJECT: Loading project and messages");
+          await loadProject(projectId);
+          await loadProjectMessages(projectId);
+        } else if (projectId) {
+          console.log("🔍 PROJECT ID ONLY: Loading project details");
+          await loadProject(projectId);
+          await loadProjectMessages(projectId);
+        } else {
+          console.log("⭐ NO PROJECT: Ready for user input");
+          setProjectStatus("idle");
         }
+      } catch (error) {
+        console.error("❌ Initialization error:", error);
+        setError("Failed to initialize project");
+        setProjectStatus("error");
+      } finally {
+        setIsNavigating(false);
       }
-    }
-  };
 
-  // Small delay to ensure all state is set
-  const timer = setTimeout(initializeFromNavigation, 100);
-  return () => clearTimeout(timer);
-}, [navPrompt, projectId, existingProject, determineWorkflowType, handleStreamingResponse, startCompleteWorkflow]);
+      console.log("✅ ChatPage initialization complete");
+    };
+
+    initialize();
+  }, [
+    checkServerHealth,
+    loadProject,
+    loadProjectMessages,
+    startCompleteWorkflow,
+    existingProject,
+    projectId,
+    fromWorkflow,
+    navPrompt,
+  ]);
 
   return (
     <div className="w-full bg-gradient-to-br from-black via-neutral-950 to-black h-screen flex">
@@ -1272,7 +1324,9 @@ useEffect(() => {
                   alt="CodePup Logo"
                   className="w-8 h-8 md:w-8 md:h-8 object-contain"
                 />
-                <span className="text-xs font-medium text-blue-400">WORKFLOW GENERATION</span>
+                <span className="text-xs font-medium text-blue-400">
+                  WORKFLOW GENERATION
+                </span>
                 <button
                   onClick={() => setShowStreamingDetails(!showStreamingDetails)}
                   className="text-xs text-slate-400 hover:text-slate-300"
@@ -1321,11 +1375,13 @@ useEffect(() => {
                 { name: "Backend Generation", icon: Database },
                 { name: "Frontend Generation", icon: Monitor },
               ].map((step, index) => {
-                const stepData = workflowSteps.find(s => s.step === step.name);
+                const stepData = workflowSteps.find(
+                  (s) => s.step === step.name
+                );
                 const isActive = currentWorkflowStep === step.name;
                 const isComplete = stepData?.isComplete;
                 const hasError = stepData?.error;
-                
+
                 return (
                   <div
                     key={step.name}
@@ -1362,33 +1418,48 @@ useEffect(() => {
                   <span className="text-xs text-blue-400 font-medium capitalize">
                     {streamingPhase}
                   </span>
-                  <span className="text-xs text-blue-300">{streamingProgress.toFixed(0)}%</span>
+                  <span className="text-xs text-blue-300">
+                    {streamingProgress.toFixed(0)}%
+                  </span>
                 </div>
-                
+
                 <div className="w-full bg-slate-700/50 rounded-full h-1.5 mb-2">
                   <div
                     className="bg-gradient-to-r from-blue-400 to-purple-400 h-1.5 rounded-full transition-all duration-300"
                     style={{ width: `${streamingProgress}%` }}
                   ></div>
                 </div>
-                
-                <p className="text-xs text-slate-300 line-clamp-2">{streamingMessage}</p>
-                
+
+                <p className="text-xs text-slate-300 line-clamp-2">
+                  {streamingMessage}
+                </p>
+
                 {/* Streaming Stats */}
                 {streamingStats.totalCharacters > 0 && showStreamingDetails && (
                   <div className="mt-2 text-xs text-slate-400 space-y-1">
                     <div className="flex justify-between">
-                      <span>{streamingStats.totalCharacters.toLocaleString()} chars</span>
                       <span>
-                        {streamingStats.chunksReceived}/{streamingStats.estimatedTotalChunks || "?"} chunks
+                        {streamingStats.totalCharacters.toLocaleString()} chars
+                      </span>
+                      <span>
+                        {streamingStats.chunksReceived}/
+                        {streamingStats.estimatedTotalChunks || "?"} chunks
                       </span>
                     </div>
-                    {streamingStats.bytesPerSecond && streamingStats.bytesPerSecond > 0 && (
-                      <div className="flex justify-between">
-                        <span>Speed: {formatSpeed(streamingStats.bytesPerSecond)}</span>
-                        <span>Duration: {formatDuration(Date.now() - streamingStats.startTime)}</span>
-                      </div>
-                    )}
+                    {streamingStats.bytesPerSecond &&
+                      streamingStats.bytesPerSecond > 0 && (
+                        <div className="flex justify-between">
+                          <span>
+                            Speed: {formatSpeed(streamingStats.bytesPerSecond)}
+                          </span>
+                          <span>
+                            Duration:{" "}
+                            {formatDuration(
+                              Date.now() - streamingStats.startTime
+                            )}
+                          </span>
+                        </div>
+                      )}
                   </div>
                 )}
               </div>
@@ -1401,7 +1472,9 @@ useEffect(() => {
           <div className="bg-slate-800/30 border-b border-slate-700/50 p-3">
             <div className="flex items-center gap-2 mb-1">
               <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-              <span className="text-xs font-medium text-blue-400">USER SESSION</span>
+              <span className="text-xs font-medium text-blue-400">
+                USER SESSION
+              </span>
             </div>
             <div className="space-y-1 text-xs text-slate-400">
               {passedUserId && <div>User ID: {passedUserId}</div>}
@@ -1415,9 +1488,14 @@ useEffect(() => {
           <div className="bg-slate-800/30 border-b border-slate-700/50 p-3">
             <div className="flex items-center gap-2 mb-2">
               <Code className="w-4 h-4 text-green-400" />
-              <span className="text-xs font-medium text-green-400">PROJECT</span>
+              <span className="text-xs font-medium text-green-400">
+                PROJECT
+              </span>
               {currentProjectInfo.isVerified && (
-                <div className="w-2 h-2 rounded-full bg-green-500" title="Project verified"></div>
+                <div
+                  className="w-2 h-2 rounded-full bg-green-500"
+                  title="Project verified"
+                ></div>
               )}
             </div>
             <div className="space-y-1">
@@ -1425,7 +1503,9 @@ useEffect(() => {
                 {currentProject.name || `Project ${currentProject.id}`}
               </p>
               {currentProject.description && (
-                <p className="text-xs text-slate-300 line-clamp-2">{currentProject.description}</p>
+                <p className="text-xs text-slate-300 line-clamp-2">
+                  {currentProject.description}
+                </p>
               )}
               <div className="flex items-center justify-between">
                 <span
@@ -1462,9 +1542,13 @@ useEffect(() => {
           <div className="bg-red-500/10 border-b border-red-500/20 p-3">
             <div className="flex items-center gap-2 mb-1">
               <AlertCircle className="w-4 h-4 text-red-400" />
-              <span className="text-xs font-medium text-red-400">SERVER OFFLINE</span>
+              <span className="text-xs font-medium text-red-400">
+                SERVER OFFLINE
+              </span>
             </div>
-            <p className="text-xs text-red-300">Cannot connect to backend server</p>
+            <p className="text-xs text-red-300">
+              Cannot connect to backend server
+            </p>
           </div>
         )}
 
@@ -1492,40 +1576,49 @@ useEffect(() => {
             </div>
           )}
 
-         {messages.length === 0 && (projectStatus === "loading" || projectStatus === "fetching" || isWorkflowActive || isNavigating) ? (
+          {messages.length === 0 &&
+          (projectStatus === "loading" ||
+            projectStatus === "fetching" ||
+            isWorkflowActive ||
+            isNavigating) ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="p-4 bg-slate-800/30 rounded-full mb-4">
                 {isWorkflowActive ? (
-                  <img src="/main.png" alt="CodePup Logo" className="w-16 h-16 md:w-8 md:h-8 object-contain" />
+                  <img
+                    src="/main.png"
+                    alt="CodePup Logo"
+                    className="w-16 h-16 md:w-8 md:h-8 object-contain"
+                  />
                 ) : (
                   <Loader2 className="w-8 h-8 text-white animate-spin" />
                 )}
               </div>
-             <h3 className="text-lg font-medium text-white mb-2">
-  {isNavigating
-    ? "Preparing Workspace"
-    : isWorkflowActive
-    ? "Complete Application Generation"
-    : projectStatus === "fetching"
-    ? "Fetching Project"
-    : existingProject
-    ? "Loading Project"
-    : "Generating Code"}
-</h3>
-<p className="text-slate-400 max-w-sm text-sm">
-  {isNavigating
-    ? "Setting up your project workspace..."
-    : isWorkflowActive
-    ? `${currentWorkflowStep} • ${workflowProgress}% complete`
-    : projectStatus === "fetching"
-    ? "Fetching project details and deployment status..."
-    : existingProject
-    ? "Loading your project preview..."
-    : "We are generating code files please wait"}
-</p>
+              <h3 className="text-lg font-medium text-white mb-2">
+                {isNavigating
+                  ? "Preparing Workspace"
+                  : isWorkflowActive
+                  ? "Complete Application Generation"
+                  : projectStatus === "fetching"
+                  ? "Fetching Project"
+                  : existingProject
+                  ? "Loading Project"
+                  : "Generating Code"}
+              </h3>
+              <p className="text-slate-400 max-w-sm text-sm">
+                {isNavigating
+                  ? "Setting up your project workspace..."
+                  : isWorkflowActive
+                  ? `${currentWorkflowStep} • ${workflowProgress}% complete`
+                  : projectStatus === "fetching"
+                  ? "Fetching project details and deployment status..."
+                  : existingProject
+                  ? "Loading your project preview..."
+                  : "We are generating code files please wait"}
+              </p>
               {currentProject && (
                 <div className="mt-3 text-xs text-slate-500">
-                  Project ID: {currentProject.id} • Status: {currentProject.status}
+                  Project ID: {currentProject.id} • Status:{" "}
+                  {currentProject.status}
                 </div>
               )}
             </div>
@@ -1534,16 +1627,20 @@ useEffect(() => {
               <div className="p-4 bg-slate-800/30 rounded-full mb-4">
                 <Code className="w-8 h-8 text-slate-400" />
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">Ready to Chat</h3>
+              <h3 className="text-lg font-medium text-white mb-2">
+                Ready to Chat
+              </h3>
               <p className="text-slate-400 max-w-sm text-sm">
                 {currentProject && currentProject.status === "ready"
                   ? "Your project is ready! Start describing changes you'd like to make."
                   : fromWorkflow
-                  ? "Starting complete application generation workflow..."
+                  ? "Complete application generation will start when you submit a prompt..."
                   : "Start describing your project or changes you'd like to make"}
               </p>
               {currentProject && (
-                <div className="mt-3 text-xs text-slate-500">Project: {currentProject.name || currentProject.id}</div>
+                <div className="mt-3 text-xs text-slate-500">
+                  Project: {currentProject.name || currentProject.id}
+                </div>
               )}
             </div>
           ) : (
@@ -1554,16 +1651,26 @@ useEffect(() => {
                   <div
                     key={message.id}
                     className={`p-3 rounded-lg ${
-                      message.type === "user" ? "bg-blue-600/20 ml-4" : "bg-slate-800/30 mr-4"
+                      message.type === "user"
+                        ? "bg-blue-600/20 ml-4"
+                        : "bg-slate-800/30 mr-4"
                     }`}
                   >
                     <div className="flex items-start gap-2">
                       {message.workflowStep && (
                         <div className="mt-1">
-                          {message.workflowStep === "Design Generation" && <Palette className="w-3 h-3 text-blue-400" />}
-                          {message.workflowStep === "Structure Planning" && <FileText className="w-3 h-3 text-green-400" />}
-                          {message.workflowStep === "Backend Generation" && <Database className="w-3 h-3 text-purple-400" />}
-                          {message.workflowStep === "Frontend Generation" && <Monitor className="w-3 h-3 text-orange-400" />}
+                          {message.workflowStep === "Design Generation" && (
+                            <Palette className="w-3 h-3 text-blue-400" />
+                          )}
+                          {message.workflowStep === "Structure Planning" && (
+                            <FileText className="w-3 h-3 text-green-400" />
+                          )}
+                          {message.workflowStep === "Backend Generation" && (
+                            <Database className="w-3 h-3 text-purple-400" />
+                          )}
+                          {message.workflowStep === "Frontend Generation" && (
+                            <Monitor className="w-3 h-3 text-orange-400" />
+                          )}
                         </div>
                       )}
                       <p className="text-white text-sm flex-1 whitespace-pre-wrap">
@@ -1572,7 +1679,9 @@ useEffect(() => {
                           <span className="inline-block w-2 h-4 bg-blue-500 ml-1 animate-pulse"></span>
                         )}
                       </p>
-                      {message.isStreaming && <Loader2 className="w-3 h-3 text-slate-400 animate-spin mt-0.5" />}
+                      {message.isStreaming && (
+                        <Loader2 className="w-3 h-3 text-slate-400 animate-spin mt-0.5" />
+                      )}
                     </div>
                     <span className="text-xs text-slate-400 mt-1 block">
                       {message.timestamp.toLocaleTimeString()}
@@ -1600,33 +1709,36 @@ useEffect(() => {
                   : "Describe your project or changes..."
               }
               rows={2}
-             disabled={
-  isLoading ||
-  projectStatus === "loading" ||
-  projectStatus === "fetching" ||
-  isStreamingResponse ||
-  isStreamingGeneration ||
-  isWorkflowActive ||
-  isNavigating || // Add this
-  isServerHealthy === false
-}
+              disabled={
+                isLoading ||
+                projectStatus === "loading" ||
+                projectStatus === "fetching" ||
+                isStreamingResponse ||
+                isStreamingGeneration ||
+                isWorkflowActive ||
+                isNavigating ||
+                isServerHealthy === false
+              }
               maxLength={1000}
             />
             <button
               onClick={handleSubmit}
-             disabled={
-  isLoading ||
-  projectStatus === "loading" ||
-  projectStatus === "fetching" ||
-  isStreamingResponse ||
-  isStreamingGeneration ||
-  isWorkflowActive ||
-  isNavigating || // Add this
-  isServerHealthy === false
-}
+              disabled={
+                isLoading ||
+                projectStatus === "loading" ||
+                projectStatus === "fetching" ||
+                isStreamingResponse ||
+                isStreamingGeneration ||
+                isWorkflowActive ||
+                isNavigating ||
+                isServerHealthy === false
+              }
               className="absolute bottom-2 right-2 p-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg transition-colors duration-200"
             >
-              {isLoading || isStreamingResponse || isStreamingGeneration || isWorkflowActive ? (
+              {isLoading ||
+              isStreamingResponse ||
+              isStreamingGeneration ||
+              isWorkflowActive ? (
                 <Loader2 className="w-4 h-4 text-white animate-spin" />
               ) : (
                 <Send className="w-4 h-4 text-white" />
@@ -1668,15 +1780,21 @@ useEffect(() => {
                     ></div>
                   </div>
                   <span className="text-blue-400">
-                    {isStreamingGeneration ? `Streaming ${streamingPhase}` : `Workflow ${currentWorkflowStep}`}
+                    {isStreamingGeneration
+                      ? `Streaming ${streamingPhase}`
+                      : `Workflow ${currentWorkflowStep}`}
                   </span>
                   <span className="text-slate-400">
-                    {isStreamingGeneration ? `${streamingProgress.toFixed(0)}%` : `${workflowProgress}%`}
+                    {isStreamingGeneration
+                      ? `${streamingProgress.toFixed(0)}%`
+                      : `${workflowProgress}%`}
                   </span>
                 </div>
               )}
               {(projectId || currentProjectInfo.id) && (
-                <span className="text-xs text-slate-400">Project: {projectId || currentProjectInfo.id}</span>
+                <span className="text-xs text-slate-400">
+                  Project: {projectId || currentProjectInfo.id}
+                </span>
               )}
               {previewUrl && (
                 <a
@@ -1698,7 +1816,8 @@ useEffect(() => {
                       ? "bg-blue-500 animate-pulse"
                       : projectStatus === "ready"
                       ? "bg-green-500"
-                      : projectStatus === "loading" || projectStatus === "fetching"
+                      : projectStatus === "loading" ||
+                        projectStatus === "fetching"
                       ? "bg-yellow-500"
                       : projectStatus === "error"
                       ? "bg-red-500"
@@ -1722,7 +1841,10 @@ useEffect(() => {
         {/* Preview Content */}
         <div className="flex-1 p-4">
           <div className="w-full h-full bg-white rounded-lg shadow-2xl overflow-hidden">
-            {previewUrl && isServerHealthy !== false && !isWorkflowActive && !isStreamingGeneration ? (
+            {previewUrl &&
+            isServerHealthy !== false &&
+            !isWorkflowActive &&
+            !isStreamingGeneration ? (
               <iframe
                 src={previewUrl}
                 className="w-full h-full"
@@ -1730,7 +1852,9 @@ useEffect(() => {
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                 onError={(e) => {
                   console.error("Iframe load error:", e);
-                  setError("Failed to load preview. The deployment might not be ready yet.");
+                  setError(
+                    "Failed to load preview. The deployment might not be ready yet."
+                  );
                 }}
               />
             ) : (
@@ -1740,8 +1864,14 @@ useEffect(() => {
                     {isServerHealthy === false ? (
                       <AlertCircle className="w-8 h-8 text-red-400" />
                     ) : isWorkflowActive || isStreamingGeneration ? (
-                      <img src="/main.png" alt="CodePup Logo" className="w-16 h-16 md:w-8 md:h-8 object-contain" />
-                    ) : isGenerating.current || projectStatus === "loading" || projectStatus === "fetching" ? (
+                      <img
+                        src="/main.png"
+                        alt="CodePup Logo"
+                        className="w-16 h-16 md:w-8 md:h-8 object-contain"
+                      />
+                    ) : isGenerating.current ||
+                      projectStatus === "loading" ||
+                      projectStatus === "fetching" ? (
                       <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
                     ) : (
                       <Code className="w-8 h-8 text-slate-400" />
@@ -1753,7 +1883,9 @@ useEffect(() => {
                       : isWorkflowActive
                       ? `Complete workflow in progress: ${currentWorkflowStep} (${workflowProgress}%)`
                       : isStreamingGeneration
-                      ? `Frontend generation: ${streamingPhase} (${streamingProgress.toFixed(0)}%)`
+                      ? `Frontend generation: ${streamingPhase} (${streamingProgress.toFixed(
+                          0
+                        )}%)`
                       : projectStatus === "fetching"
                       ? "Fetching project details..."
                       : isGenerating.current
@@ -1767,7 +1899,7 @@ useEffect(() => {
                       : currentProject?.status === "pending"
                       ? "Project build is pending..."
                       : fromWorkflow
-                      ? "Complete application workflow will start shortly..."
+                      ? "Complete application workflow will start when you submit a prompt..."
                       : "Preview will appear here"}
                   </p>
 
@@ -1782,13 +1914,20 @@ useEffect(() => {
                       </div>
                       <div className="text-sm text-slate-600 space-y-1">
                         <div>
-                          Current Step: <span className="font-medium text-blue-600">{currentWorkflowStep}</span>
+                          Current Step:{" "}
+                          <span className="font-medium text-blue-600">
+                            {currentWorkflowStep}
+                          </span>
                         </div>
                         <div className="text-xs text-slate-500">
-                          Progress: <span className="font-medium">{workflowProgress}%</span> complete
+                          Progress:{" "}
+                          <span className="font-medium">
+                            {workflowProgress}%
+                          </span>{" "}
+                          complete
                         </div>
                       </div>
-                      
+
                       {/* Mini workflow steps */}
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                         {[
@@ -1797,11 +1936,15 @@ useEffect(() => {
                           { name: "Backend", icon: Database },
                           { name: "Frontend", icon: Monitor },
                         ].map((step, index) => {
-                          const stepData = workflowSteps.find(s => s.step.includes(step.name));
-                          const isActive = currentWorkflowStep.includes(step.name);
+                          const stepData = workflowSteps.find((s) =>
+                            s.step.includes(step.name)
+                          );
+                          const isActive = currentWorkflowStep.includes(
+                            step.name
+                          );
                           const isComplete = stepData?.isComplete;
                           const hasError = stepData?.error;
-                          
+
                           return (
                             <div
                               key={step.name}
@@ -1842,25 +1985,38 @@ useEffect(() => {
                       </div>
                       <div className="text-sm text-slate-600 space-y-1">
                         <div>
-                          Phase: <span className="font-medium text-green-600 capitalize">{streamingPhase}</span>
+                          Phase:{" "}
+                          <span className="font-medium text-green-600 capitalize">
+                            {streamingPhase}
+                          </span>
                         </div>
                         {streamingStats.totalCharacters > 0 && (
                           <div>
                             Generated:{" "}
-                            <span className="font-medium">{streamingStats.totalCharacters.toLocaleString()}</span>{" "}
+                            <span className="font-medium">
+                              {streamingStats.totalCharacters.toLocaleString()}
+                            </span>{" "}
                             characters
                           </div>
                         )}
                         {streamingStats.chunksReceived > 0 && (
                           <div>
-                            Chunks: <span className="font-medium">{streamingStats.chunksReceived}</span> received
+                            Chunks:{" "}
+                            <span className="font-medium">
+                              {streamingStats.chunksReceived}
+                            </span>{" "}
+                            received
                           </div>
                         )}
-                        {streamingStats.bytesPerSecond && streamingStats.bytesPerSecond > 0 && (
-                          <div>
-                            Speed: <span className="font-medium">{formatSpeed(streamingStats.bytesPerSecond)}</span>
-                          </div>
-                        )}
+                        {streamingStats.bytesPerSecond &&
+                          streamingStats.bytesPerSecond > 0 && (
+                            <div>
+                              Speed:{" "}
+                              <span className="font-medium">
+                                {formatSpeed(streamingStats.bytesPerSecond)}
+                              </span>
+                            </div>
+                          )}
                       </div>
                     </div>
                   )}
@@ -1875,29 +2031,34 @@ useEffect(() => {
                         {currentProject.status === "building" && (
                           <div className="mt-2">
                             <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{ width: "60%" }}></div>
+                              <div
+                                className="bg-blue-600 h-2 rounded-full animate-pulse"
+                                style={{ width: "60%" }}
+                              ></div>
                             </div>
                           </div>
                         )}
                       </div>
                     )}
 
-                  {(isServerHealthy === false || projectStatus === "error") && !isWorkflowActive && !isStreamingGeneration && (
-                    <button
-                      onClick={retryConnection}
-                      disabled={isRetrying}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded-lg transition-colors text-sm"
-                    >
-                      {isRetrying ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
-                          Reconnecting...
-                        </>
-                      ) : (
-                        "Retry Connection"
-                      )}
-                    </button>
-                  )}
+                  {(isServerHealthy === false || projectStatus === "error") &&
+                    !isWorkflowActive &&
+                    !isStreamingGeneration && (
+                      <button
+                        onClick={retryConnection}
+                        disabled={isRetrying}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded-lg transition-colors text-sm"
+                      >
+                        {isRetrying ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                            Reconnecting...
+                          </>
+                        ) : (
+                          "Retry Connection"
+                        )}
+                      </button>
+                    )}
 
                   {/* Stop workflow button in preview */}
                   {(isWorkflowActive || isStreamingGeneration) && (
